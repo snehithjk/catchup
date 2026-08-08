@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "catchup"
+version = "0.1.0"
+description = "Personalized, grounded git catch-up briefs"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "catchup contributors"}]
+dependencies = []
+
+[project.scripts]
+catchup = "catchup.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
