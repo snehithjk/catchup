@@ -1,6 +1,5 @@
 """Pipeline orchestration kept separate from the pure scoring stages."""
 
-import os
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -8,11 +7,12 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from .brief import build_prompt, call_compatible_api, render_stub_brief
 from .changes import ingest
 from .exposure import build_knowledge_map
-from .git import changed_paths, list_files, log, repo_root
+from .git import (changed_paths, file_at_commit, list_files_at_commit, log,
+                  repo_root, resolve_commit)
 from .graph import build_import_graph
 from .models import Change, CommitRecord, ExposureEntry, Feedback, PipelineResult, RankedChange
 from .ranking import rank_changes
-from .storage import load_feedback, save_knowledge_map
+from .storage import load_feedback, load_last_brief, save_knowledge_map, save_last_brief
 from .verify import verify_brief
 
 
@@ -29,18 +29,25 @@ def parse_window_start(value: str, as_of: datetime) -> datetime:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
-def _read_contents(repo: str, files: Sequence[str]) -> Dict[str, str]:
+def _read_contents(repo: str, commit: str, files: Sequence[str]) -> Dict[str, str]:
     result = {}
     for path in files:
         if not path.endswith((".py", ".js", ".jsx", ".ts", ".tsx")):
             continue
-        full_path = os.path.join(repo, path)
         try:
-            with open(full_path, encoding="utf-8") as handle:
-                result[path] = handle.read()
-        except (OSError, UnicodeDecodeError):
+            result[path] = file_at_commit(repo, commit, path)
+        except (OSError, UnicodeDecodeError, RuntimeError):
             continue
     return result
+
+
+def _expand_feedback(feedback, last_brief):
+    expanded = dict(feedback)
+    for item_id, entry in feedback.items():
+        for path in last_brief.get(item_id, ()):
+            prefix = path.rsplit("/", 1)[0] if "/" in path else path
+            expanded["prefix:" + prefix] = entry
+    return expanded
 
 
 def run_pipeline(repo: str, emails: Sequence[str], window_start: datetime,
@@ -67,20 +74,26 @@ def run_pipeline(repo: str, emails: Sequence[str], window_start: datetime,
     if persist:
         save_knowledge_map(root, knowledge_map)
     changes = ingest(root, window_records)
-    contents = _read_contents(root, list_files(root))
+    boundary_records = window_records or prior_records
+    boundary_commit = boundary_records[0].commit if boundary_records else resolve_commit(root, "HEAD")
+    contents = _read_contents(root, boundary_commit,
+                              list_files_at_commit(root, boundary_commit))
     fan_in = build_import_graph(list(contents), contents)
     feedback = load_feedback(root) if persist else {}
+    if persist:
+        feedback = _expand_feedback(feedback, load_last_brief(root))
     selected, _ = rank_changes(changes, knowledge_map, fan_in, feedback, top_n=top_n)
     selected_ids = {item.change.item_id for item in selected}
     other_commits = [change.item_id for change in changes if change.item_id not in selected_ids]
     result = PipelineResult(knowledge_map=dict(knowledge_map), ranked=list(selected),
                             other_count=len(other_commits))
     if use_llm and selected:
-        brief = call_compatible_api(build_prompt(
-            selected, ",".join(emails), tuple(knowledge_map)))
+        brief = call_compatible_api(build_prompt(selected, tuple(knowledge_map)))
     else:
         brief = render_stub_brief(selected, other_commits)
     grounded, errors = verify_brief(root, brief)
     if not grounded:
         raise RuntimeError("brief failed grounding checks: {}".format("; ".join(errors)))
+    if persist:
+        save_last_brief(root, selected)
     return result, brief

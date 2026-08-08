@@ -7,13 +7,18 @@ from typing import Dict, Iterable, List, Mapping, Sequence, Set
 
 
 _PY_IMPORT = re.compile(r"^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+))")
-_JS_IMPORT = re.compile(r"(?:from\s+|import\s*\(|require\(\s*[\"'])([.@\w_/-]+)")
+_JS_IMPORT = re.compile(
+    r"(?:\bfrom\s*[\"']|\bimport\s*(?:\(\s*)?[\"']|\brequire\s*\(\s*[\"'])([.@\w_/-]+)"
+)
 
 
 def _candidates(source: str, imported: str) -> List[str]:
     base = os.path.dirname(source)
     if imported.startswith("."):
-        path = os.path.normpath(os.path.join(base, imported))
+        level = len(imported) - len(imported.lstrip("."))
+        for _ in range(max(0, level - 1)):
+            base = os.path.dirname(base)
+        path = os.path.normpath(os.path.join(base, imported[level:].lstrip("/")))
     else:
         path = imported.replace(".", "/")
     return [path, path + ".py", path + ".js", path + ".ts", path + "/__init__.py",
@@ -45,4 +50,3 @@ def path_distance_fan_in(path: str) -> float:
     """Conservative fallback for languages with no parser in v1."""
     depth = path.count("/")
     return 1.0 + (1.0 / (1.0 + depth))
-

@@ -61,7 +61,7 @@ def test_order():
 """)
     _commit(path, "test: cover order parsing", "2025-01-10T10:00:00+00:00", ALICE)
 
-    _write(path, "app/service.py", """def parse_order(order_id, currency=\"USD\"):
+    _write(path, "app/service.py", """def parse_order(order_id, currency):
     return {\"id\": order_id, \"currency\": currency, \"status\": \"ready\"}
 """)
     _commit(path, "refactor: require currency for order parsing", "2025-02-05T10:00:00+00:00", BOB)
@@ -69,7 +69,15 @@ def test_order():
     _write(path, "docs/operations.md", "# Operations\n\nRestart the worker after deploy.\n")
     _commit(path, "docs: add operations note", "2025-02-10T10:00:00+00:00", BOB)
 
-    _write(path, "app/service.py", """def parse_order(order_id, currency=\"USD\"):
+    _write(path, "app/test_service.py", """from app.service import parse_order
+
+
+def test_order_contract():
+    assert parse_order(1, \"USD\")[\"status\"] == \"ready\"
+""")
+    _commit(path, "test: rename order contract fixture", "2025-02-20T10:00:00+00:00", BOB)
+
+    _write(path, "app/service.py", """def parse_order(order_id, currency):
     if not currency:
         raise ValueError(\"currency is required\")
     return {\"id\": order_id, \"currency\": currency, \"status\": \"ready\"}
@@ -83,4 +91,3 @@ def test_order():
         "expected_paths": ["app/service.py"],
         "post_window_paths": ["app/service.py"],
     }
-

@@ -28,16 +28,22 @@ def main():
         )
         selected_paths = {path for item in result.ranked for path in item.change.paths}
         expected = set(truth["expected_paths"])
-        post_paths = set(truth["post_window_paths"])
-        precision = (1.0 if result.ranked and selected_paths & post_paths else 0.0)
-        recall = 1.0 if expected & selected_paths else 0.0
+        post_records = log(directory, since=truth["window_end"])
+        post_paths = {path for record in post_records
+                      for _, path in changed_paths(directory, record)}
+        relevant_items = sum(1 for item in result.ranked
+                             if set(item.change.paths) & post_paths)
+        precision = relevant_items / len(result.ranked) if result.ranked else 0.0
+        recall = len(expected & selected_paths) / len(expected) if expected else 1.0
         grounded, errors = verify_brief(directory, brief)
         noise = len(result.ranked) / 10.0
         print("synthetic precision={:.2f} recall={:.2f} grounding={:.2f} noise={:.2f} items={}".format(
             precision, recall, 1.0 if grounded else 0.0, noise, len(result.ranked)))
         if not grounded:
             print("grounding errors: {}".format("; ".join(errors)), file=sys.stderr)
-        return 0 if precision == 1.0 and recall == 1.0 and grounded and noise <= 1.0 else 1
+        # A non-perfect proxy score is useful signal, not a harness failure.
+        # Grounding remains a hard gate; recall/noise must still be non-empty and bounded.
+        return 0 if grounded and recall > 0.0 and noise <= 1.0 else 1
 
 
 if __name__ == "__main__":

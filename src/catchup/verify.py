@@ -3,7 +3,7 @@
 import re
 from typing import List, Tuple
 
-from .git import GitError, diff as git_diff, log as git_log
+from .git import GitError, diff_for_commit
 
 
 _CITATION = re.compile(r"\(([0-9a-f]{7,40})\)")
@@ -19,11 +19,10 @@ def sentences(text: str) -> List[str]:
 
 
 def _diff_for_hash(repo: str, short_hash: str) -> str:
-    records = git_log(repo)
-    matches = [record for record in records if record.commit.startswith(short_hash)]
-    if not matches:
+    try:
+        return diff_for_commit(repo, short_hash)
+    except GitError:
         raise GitError("citation does not resolve: {}".format(short_hash))
-    return git_diff(repo, matches[0])
 
 
 def verify_brief(repo: str, text: str) -> Tuple[bool, Tuple[str, ...]]:
@@ -40,6 +39,8 @@ def verify_brief(repo: str, text: str) -> Tuple[bool, Tuple[str, ...]]:
                 errors.append("sentence {}: {}".format(index, error))
                 continue
             references = list(_CODE.findall(sentence)) + _PATH.findall(sentence)
+            if not references and "other window changes" not in sentence:
+                errors.append("sentence {} has no explicit diff evidence".format(index))
             for reference in references:
                 reference = reference.strip()
                 if reference in (citation, "catchup", "git") or len(reference) < 2:

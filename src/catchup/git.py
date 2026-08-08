@@ -31,13 +31,15 @@ def _parse_datetime(value: str) -> datetime:
 
 
 def log(repo: str, since: Optional[str] = None,
-        before: Optional[str] = None) -> List[CommitRecord]:
+        before: Optional[str] = None, ref: str = "HEAD") -> List[CommitRecord]:
     args = ["log", "--all", "--date=iso-strict",
             "--format=%H%x00%aI%x00%ae%x00%cE%x00%P%x00%B%x1e"]
     if since:
         args.append("--since={}".format(since))
     if before:
         args.append("--before={}".format(before))
+    # HEAD includes merged side-branch history while excluding unrelated local branches.
+    args.append(ref)
     raw = run_git(repo, args)
     records = []
     for chunk in raw.split("\x1e"):
@@ -105,3 +107,28 @@ def numstat(repo: str, record: CommitRecord) -> List[Tuple[str, int, int]]:
 
 def list_files(repo: str) -> List[str]:
     return [line for line in run_git(repo, ["ls-files"]).splitlines() if line]
+
+
+def list_files_at_commit(repo: str, commit: str) -> List[str]:
+    return [line for line in run_git(repo, ["ls-tree", "-r", "--name-only", commit]).splitlines()
+            if line]
+
+
+def file_at_commit(repo: str, commit: str, path: str) -> str:
+    return run_git(repo, ["show", "{}:{}".format(commit, path)])
+
+
+def resolve_commit(repo: str, commit: str) -> str:
+    """Resolve an abbreviated commit and fail with a useful git error."""
+    return run_git(repo, ["rev-parse", "--verify", "{}^{{commit}}".format(commit)]).strip()
+
+
+def diff_for_commit(repo: str, commit: str) -> str:
+    """Read a commit diff without enumerating the repository's full history."""
+    full_commit = resolve_commit(repo, commit)
+    parents = run_git(repo, ["rev-list", "--parents", "-n", "1", full_commit]).split()[1:]
+    if parents:
+        return run_git(repo, ["diff", "--no-ext-diff", "--find-renames",
+                              parents[0], full_commit, "--"])
+    return run_git(repo, ["show", "--format=", "--no-ext-diff",
+                          "--find-renames", "--root", full_commit, "--"])

@@ -30,12 +30,14 @@ class ExposureEntry:
     score: float
     last_seen: str
     basis: Tuple[str, ...]
+    last_commit: str = ""
 
     def to_dict(self) -> Dict[str, object]:
         return {
             "score": round(self.score, 6),
             "last_seen": self.last_seen,
             "basis": list(self.basis),
+            "last_commit": self.last_commit,
         }
 
 
@@ -92,6 +94,9 @@ class RankedChange:
     novelty: float
     score: float
     reasons: Tuple[str, ...] = ()
+    exposure_paths: Tuple[str, ...] = ()
+    exposure_basis: Tuple[str, ...] = ()
+    exposure_commit: str = ""
 
     def to_dict(self) -> Dict[str, object]:
         change = self.change
@@ -105,6 +110,9 @@ class RankedChange:
             "blast_radius": round(self.blast_radius, 6),
             "novelty": round(self.novelty, 6),
             "reasons": list(self.reasons),
+            "exposure_paths": list(self.exposure_paths),
+            "exposure_basis": list(self.exposure_basis),
+            "exposure_commit": self.exposure_commit,
         }
 
 

@@ -32,6 +32,7 @@ def build_knowledge_map(records: Sequence[CommitRecord], paths_by_commit: Mappin
         raise ValueError("half_life_days must be positive")
     scores = {}  # type: Dict[str, float]
     seen = {}  # type: Dict[str, datetime]
+    seen_commit = {}  # type: Dict[str, str]
     bases = {}  # type: Dict[str, Set[str]]
     for record in records:
         authored = record.author_email in identities
@@ -49,6 +50,7 @@ def build_knowledge_map(records: Sequence[CommitRecord], paths_by_commit: Mappin
             scores[path] = scores.get(path, 0.0) + contribution
             if path not in seen or record.authored_at > seen[path]:
                 seen[path] = record.authored_at
+                seen_commit[path] = record.commit
             bases.setdefault(path, set())
             if authored:
                 bases[path].add("authored")
@@ -61,5 +63,6 @@ def build_knowledge_map(records: Sequence[CommitRecord], paths_by_commit: Mappin
             score=scores[path],
             last_seen=seen[path].astimezone(timezone.utc).isoformat(),
             basis=tuple(sorted(bases[path])),
+            last_commit=seen_commit[path],
         )
     return result

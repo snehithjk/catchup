@@ -28,10 +28,10 @@ The brief is intentionally small. It ranks changes with exposure overlap, module
 
 ## Current milestone
 
-The first implementation covers the verifier/eval harness, synthetic backtest, exposure map, change ingestion, deterministic ranking, offline brief, optional model edge, and feedback storage. `make eval` is the reproducible smoke test:
+The first implementation covers the verifier/eval harness, synthetic backtest, exposure map, change ingestion, deterministic ranking, offline brief, optional model edge, and feedback storage. The brief now shows the historical exposure evidence that made each item personal, and feedback carries forward by path prefix. `make eval` is the reproducible smoke test:
 
 ```text
-synthetic precision=1.00 recall=1.00 grounding=1.00 noise=0.10 items=1
+synthetic precision=0.50 recall=1.00 grounding=1.00 noise=0.20 items=2
 ```
 
 These precision and recall values are directional proxies, not proof that a human comprehended the change. Real-repository fixtures should be pinned before being used for comparison.
