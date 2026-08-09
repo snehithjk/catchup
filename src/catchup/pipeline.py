@@ -11,14 +11,22 @@ from .git import log, paths_for_commits, repo_root, resolve_commit, source_files
 from .graph import build_import_graph
 from .models import Change, CommitRecord, ExposureEntry, Feedback, PipelineResult, RankedChange
 from .ranking import rank_changes
-from .storage import load_feedback, load_last_brief, save_knowledge_map, save_last_brief
+from .storage import (load_feedback, load_last_brief, save_knowledge_map,
+                      save_last_brief, save_last_run)
 from .verify import verify_brief
 
 
 _DURATION = re.compile(r"^(\d+)([mhdw])$")
 
 
-def parse_window_start(value: str, as_of: datetime) -> datetime:
+def parse_window_start(value: str, as_of: datetime, last_run: Optional[str] = None) -> datetime:
+    if value.strip().lower() == "last":
+        if last_run:
+            parsed = datetime.fromisoformat(last_run.replace("Z", "+00:00"))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        # First use should still be useful; "last" behaves like the normal
+        # 30-day window until a previous successful run exists.
+        return as_of - timedelta(days=30)
     match = _DURATION.match(value.strip().lower())
     if match:
         amount = int(match.group(1))
@@ -38,7 +46,7 @@ def _expand_feedback(feedback, last_brief):
 
 
 def run_pipeline(repo: str, emails: Sequence[str], window_start: datetime,
-                 window_end: Optional[datetime] = None, top_n: int = 10,
+                 window_end: Optional[datetime] = None, top_n: int = 5,
                  half_life_days: float = 90.0, authored_weight: float = 1.0,
                  reviewed_weight: float = 0.6, use_llm: bool = False,
                  persist: bool = True) -> Tuple[PipelineResult, str]:
@@ -82,4 +90,5 @@ def run_pipeline(repo: str, emails: Sequence[str], window_start: datetime,
         raise RuntimeError("brief failed grounding checks: {}".format("; ".join(errors)))
     if persist:
         save_last_brief(root, selected)
+        save_last_run(root, end.astimezone(timezone.utc).isoformat())
     return result, brief

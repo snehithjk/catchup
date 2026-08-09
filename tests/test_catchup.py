@@ -8,11 +8,12 @@ from unittest import mock
 from catchup.brief import build_prompt, call_compatible_api, render_stub_brief, truncate_diff
 from catchup.changes import _dependency_deltas, ingest
 from catchup.exposure import build_knowledge_map, path_exposure_weight
-from catchup.git import changed_paths, log, paths_for_commits
+from catchup.git import changed_paths, discover_email, log, paths_for_commits
 from catchup.graph import build_import_graph
 from catchup.pipeline import parse_window_start, run_pipeline
 from catchup.ranking import rank_changes
-from catchup.storage import append_feedback, load_feedback, save_knowledge_map
+from catchup.storage import (append_feedback, load_feedback, load_last_run,
+                             save_knowledge_map)
 from catchup.verify import verify_brief
 from catchup.models import CommitRecord
 from fixtures.synthetic.generate import ALICE, CUTOFF, WINDOW_END, create_repo
@@ -33,6 +34,7 @@ class CatchupTests(unittest.TestCase):
         self.assertTrue(paths)
         batched = paths_for_commits(self.temp.name, before=CUTOFF)
         self.assertIn(records[-1].commit, batched)
+        self.assertEqual(discover_email(self.temp.name), "fixture@example.com")
 
     def test_git_history_ignores_fetched_but_unmerged_refs(self):
         from fixtures.synthetic.generate import _commit, _run, _write
@@ -106,6 +108,7 @@ class CatchupTests(unittest.TestCase):
             datetime.fromisoformat(WINDOW_END), persist=True,
         )
         self.assertTrue(os.path.exists(os.path.join(self.temp.name, ".catchup", "last-brief.json")))
+        self.assertTrue(load_last_run(self.temp.name))
 
     def test_empty_personalized_brief_is_valid_markdown(self):
         result, brief = run_pipeline(
@@ -183,6 +186,8 @@ class CatchupTests(unittest.TestCase):
         as_of = datetime(2025, 1, 31, tzinfo=timezone.utc)
         self.assertEqual(parse_window_start("2d", as_of).day, 29)
         self.assertEqual(parse_window_start("2025-01-01", as_of).tzinfo, timezone.utc)
+        self.assertEqual(parse_window_start("last", as_of, "2025-01-30T00:00:00+00:00").day, 30)
+        self.assertEqual(parse_window_start("last", as_of).day, 1)
 
     def test_diff_truncation_prioritizes_exposed_file(self):
         patch = (

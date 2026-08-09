@@ -27,6 +27,14 @@ def repo_root(repo: str) -> str:
     return run_git(repo, ["rev-parse", "--show-toplevel"]).strip()
 
 
+def discover_email(repo: str) -> str:
+    """Use local Git identity, falling back to the current branch author."""
+    configured = run_git(repo, ["config", "--get", "user.email"], check=False).strip()
+    if configured:
+        return configured.lower()
+    return run_git(repo, ["log", "-1", "--format=%ae"]).strip().lower()
+
+
 def _parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
 

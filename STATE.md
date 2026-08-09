@@ -7,4 +7,5 @@
 - Iteration 2 tightened explicit diff evidence, relative JS/TS graph resolution, model prompt privacy/HTTPS policy, and made the synthetic contract break plus eval denominators honest.
 - Latest verification before the public-repository pass: 16 unit tests pass, synthetic precision is 0.50, recall 1.00, grounding 1.00, noise 0.20, and core LOC is 1062.
 - Public-repository pass: pinned HTTPX, Flask, and Vite checkouts are recorded in `fixtures/real/manifest.json`; all three top-N reports matched 2/2 documented anchors and passed grounding. The pass found and fixed `git log --all` remote-branch pollution, historical-tree drift, import-move novelty, context-file over-weighting, and merge/integration ranking ambiguity. See `docs/real-evaluation.md`.
+- Re-entry polish: the CLI now infers the local Git identity and persists the last successful run, so `catchup --since last` supports returning to interrupted work without remembering timestamps. Practitioner and big-tech research is recorded in `docs/field-research.md`.
 - Packaging smoke test builds and installs `catchup-0.1.0` successfully; no external runtime dependencies are required.
