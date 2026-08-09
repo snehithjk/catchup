@@ -7,6 +7,20 @@ from typing import Dict, Iterable, Mapping, Sequence, Set
 from .models import CommitRecord, ExposureEntry
 
 
+def path_exposure_weight(path: str) -> float:
+    """Treat docs/build metadata as context, not equivalent to code ownership."""
+    lowered = path.lower()
+    basename = lowered.rsplit("/", 1)[-1]
+    if lowered.startswith(("docs/", "doc/")) or basename.startswith(("readme", "changelog")):
+        return 0.35
+    if (lowered.startswith((".github/", ".circleci/")) or
+            basename in ("pyproject.toml", "setup.py", "setup.cfg", "package.json",
+                         "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
+                         "poetry.lock", "requirements.txt", ".pre-commit-config.yaml")):
+        return 0.25
+    return 1.0
+
+
 def _is_trailer(message: str, label: str, email: str) -> bool:
     wanted = email.lower()
     for line in message.splitlines():
@@ -45,8 +59,8 @@ def build_knowledge_map(records: Sequence[CommitRecord], paths_by_commit: Mappin
         weight = max(authored_weight if authored else 0.0,
                      reviewed_weight if reviewed else 0.0)
         decay = math.pow(0.5, _age_days(record.authored_at, as_of) / half_life_days)
-        contribution = weight * decay
         for path in paths_by_commit.get(record.commit, ()):
+            contribution = weight * decay * path_exposure_weight(path)
             scores[path] = scores.get(path, 0.0) + contribution
             if path not in seen or record.authored_at > seen[path]:
                 seen[path] = record.authored_at

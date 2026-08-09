@@ -1,0 +1,61 @@
+{
+  "method": "reachable-head-history, first-parent-window, deterministic-offline-brief",
+  "acquisition": "git clone --filter=blob:none --no-tags",
+  "scenarios": [
+    {
+      "name": "httpx-028-upgrade",
+      "directory": "httpx",
+      "url": "https://github.com/encode/httpx",
+      "license": "BSD-3-Clause",
+      "pinned_head": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "identity": "tom@tomchristie.com",
+      "cutoff": "2024-11-01T00:00:00+00:00",
+      "window_end": "2024-12-01T00:00:00+00:00",
+      "expected_commits": [
+        "1805ee0d22f9",
+        "80960fa31918"
+      ],
+      "knowledge_sources": [
+        "https://github.com/encode/httpx/blob/master/CHANGELOG.md",
+        "https://www.python-httpx.org/"
+      ]
+    },
+    {
+      "name": "flask-api-contracts",
+      "directory": "flask",
+      "url": "https://github.com/pallets/flask",
+      "license": "BSD-3-Clause",
+      "pinned_head": "6a2f545bfd8ed31e19066a299296917e034aca58",
+      "identity": "davidism@gmail.com",
+      "cutoff": "2026-01-01T00:00:00-08:00",
+      "window_end": "2026-02-01T00:00:00-08:00",
+      "expected_commits": [
+        "809d5a8869d4",
+        "4b8bde97d4fa"
+      ],
+      "knowledge_sources": [
+        "https://github.com/pallets/flask/blob/main/CHANGES.rst",
+        "https://flask.palletsprojects.com/en/stable/"
+      ]
+    },
+    {
+      "name": "vite-input-and-plugin-resolution",
+      "directory": "vite",
+      "url": "https://github.com/vitejs/vite",
+      "license": "MIT",
+      "pinned_head": "57fea001d154e7dd8d5d74d3082731f1dcfd31be",
+      "identity": "green@sapphi.red",
+      "cutoff": "2026-07-15T00:00:00+09:00",
+      "window_end": "2026-08-01T00:00:00+09:00",
+      "expected_commits": [
+        "41df81a6a4c3",
+        "9beae37d7221"
+      ],
+      "knowledge_sources": [
+        "https://github.com/vitejs/vite#readme",
+        "https://vite.dev/config/build-options",
+        "https://vite.dev/guide/api-plugin"
+      ]
+    }
+  ]
+}

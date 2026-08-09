@@ -39,7 +39,9 @@ def _dependency_deltas(paths: Sequence[str], patch: str) -> Tuple[Tuple[str, ...
             match = re.match(r"^[-]\s*(?:import\s+.+?\s+from\s+|import\s+|from\s+)([\w@./-]+)", line)
             if match:
                 removed.add(match.group(1))
-    return tuple(sorted(added)), tuple(sorted(removed))
+    # Moves and refactors often remove and re-add the same import. Only the
+    # net delta should drive novelty; otherwise every import shuffle looks new.
+    return tuple(sorted(added - removed)), tuple(sorted(removed - added))
 
 
 def ingest(repo: str, records: Sequence[CommitRecord]) -> Tuple[Change, ...]:

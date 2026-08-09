@@ -1,17 +1,19 @@
 import os
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timezone
 from unittest import mock
 
 from catchup.brief import build_prompt, call_compatible_api, render_stub_brief, truncate_diff
-from catchup.changes import ingest
-from catchup.exposure import build_knowledge_map
-from catchup.git import changed_paths, log
+from catchup.changes import _dependency_deltas, ingest
+from catchup.exposure import build_knowledge_map, path_exposure_weight
+from catchup.git import changed_paths, discover_email, log, paths_for_commits
 from catchup.graph import build_import_graph
 from catchup.pipeline import parse_window_start, run_pipeline
 from catchup.ranking import rank_changes
-from catchup.storage import append_feedback, load_feedback, save_knowledge_map
+from catchup.storage import (append_feedback, load_feedback, load_last_run,
+                             save_knowledge_map)
 from catchup.verify import verify_brief
 from catchup.models import CommitRecord
 from fixtures.synthetic.generate import ALICE, CUTOFF, WINDOW_END, create_repo
@@ -30,6 +32,20 @@ class CatchupTests(unittest.TestCase):
         self.assertEqual(len(records), 6)
         paths = changed_paths(self.temp.name, records[-1])
         self.assertTrue(paths)
+        batched = paths_for_commits(self.temp.name, before=CUTOFF)
+        self.assertIn(records[-1].commit, batched)
+        self.assertEqual(discover_email(self.temp.name), "fixture@example.com")
+
+    def test_git_history_ignores_fetched_but_unmerged_refs(self):
+        from fixtures.synthetic.generate import _commit, _run, _write
+        _run(self.temp.name, ["checkout", "-q", "-b", "unmerged-work"])
+        _write(self.temp.name, "unmerged.py", "value = 1\n")
+        _commit(self.temp.name, "wip: unrelated branch", "2025-04-01T10:00:00+00:00", "other@example.com")
+        _run(self.temp.name, ["checkout", "-q", "main"])
+        self.assertEqual(len(log(self.temp.name)), 6)
+        self.assertNotIn("unmerged.py", {
+            path for paths in paths_for_commits(self.temp.name).values() for path in paths
+        })
 
     def test_exposure_decay_and_basis(self):
         records = log(self.temp.name, before=CUTOFF)
@@ -44,6 +60,8 @@ class CatchupTests(unittest.TestCase):
         newer = build_knowledge_map(records, path_map, [ALICE],
                                     datetime(2025, 1, 11, tzinfo=timezone.utc), half_life_days=90)
         self.assertGreater(newer["app/service.py"].score, older)
+        self.assertLess(path_exposure_weight("CHANGELOG.md"), path_exposure_weight("app/service.py"))
+        self.assertLess(path_exposure_weight("pyproject.toml"), path_exposure_weight("app/service.py"))
 
     def test_ingestion_detects_signature_change(self):
         records = log(self.temp.name, since=CUTOFF, before=WINDOW_END)
@@ -51,6 +69,12 @@ class CatchupTests(unittest.TestCase):
         service = next(change for change in changes if "app/service.py" in change.paths)
         self.assertIn("app/service.py", service.signature_paths)
         self.assertGreater(service.additions, 0)
+
+    def test_import_move_is_not_a_new_dependency(self):
+        added, removed = _dependency_deltas(
+            ["app/service.py"], "+import package\n-import package\n")
+        self.assertEqual(added, ())
+        self.assertEqual(removed, ())
 
     def test_review_trailer_creates_reviewed_exposure(self):
         reviewed = CommitRecord(
@@ -84,6 +108,7 @@ class CatchupTests(unittest.TestCase):
             datetime.fromisoformat(WINDOW_END), persist=True,
         )
         self.assertTrue(os.path.exists(os.path.join(self.temp.name, ".catchup", "last-brief.json")))
+        self.assertTrue(load_last_run(self.temp.name))
 
     def test_empty_personalized_brief_is_valid_markdown(self):
         result, brief = run_pipeline(
@@ -144,10 +169,25 @@ class CatchupTests(unittest.TestCase):
                                   top_n=10)
         self.assertLess(nudged[0].score, base[0].score)
 
+    def test_merge_is_visible_but_deprioritized_as_integration(self):
+        result, _ = run_pipeline(
+            self.temp.name, [ALICE], datetime.fromisoformat(CUTOFF),
+            datetime.fromisoformat(WINDOW_END), persist=False,
+        )
+        change = ingest(self.temp.name, log(self.temp.name, since=CUTOFF, before=WINDOW_END))[0]
+        regular, _ = rank_changes([change], result.knowledge_map, {}, top_n=1)
+        merge, _ = rank_changes([
+            replace(change, is_merge=True, subject="Merge branch 'topic'")
+        ], result.knowledge_map, {}, top_n=1)
+        self.assertLess(merge[0].score, regular[0].score)
+        self.assertIn("integration commit", merge[0].reasons)
+
     def test_duration_parser(self):
         as_of = datetime(2025, 1, 31, tzinfo=timezone.utc)
         self.assertEqual(parse_window_start("2d", as_of).day, 29)
         self.assertEqual(parse_window_start("2025-01-01", as_of).tzinfo, timezone.utc)
+        self.assertEqual(parse_window_start("last", as_of, "2025-01-30T00:00:00+00:00").day, 30)
+        self.assertEqual(parse_window_start("last", as_of).day, 1)
 
     def test_diff_truncation_prioritizes_exposed_file(self):
         patch = (

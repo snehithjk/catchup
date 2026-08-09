@@ -6,9 +6,9 @@ import sys
 from datetime import datetime, timezone
 from typing import List, Optional, Sequence
 
-from .git import GitError, repo_root
+from .git import GitError, discover_email, repo_root
 from .pipeline import parse_window_start, run_pipeline
-from .storage import append_feedback
+from .storage import append_feedback, load_last_run
 
 
 def _emails(values: Sequence[str]) -> List[str]:
@@ -24,11 +24,11 @@ def _run_parser() -> argparse.ArgumentParser:
         description="Surface git changes that threaten one developer's knowledge.",
     )
     parser.add_argument("--repo", default=".", help="local git repository (default: .)")
-    parser.add_argument("--me", action="append", required=True,
-                        help="your git email; repeat or comma-separate identities")
+    parser.add_argument("--me", action="append",
+                        help="your git email; repeat or comma-separate identities (default: local Git identity)")
     parser.add_argument("--since", default="30d",
-                        help="window such as 30d, 2w, or an ISO timestamp")
-    parser.add_argument("--top", type=int, default=10, help="maximum brief items (default: 10)")
+                        help="window such as 30d, 2w, last, or an ISO timestamp")
+    parser.add_argument("--top", type=int, default=5, help="maximum brief items (default: 5)")
     parser.add_argument("--half-life", type=float, default=90.0,
                         help="exposure decay half-life in days (default: 90)")
     parser.add_argument("--authored-weight", type=float, default=1.0,
@@ -67,8 +67,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 as_of = as_of.replace(tzinfo=timezone.utc)
         else:
             as_of = datetime.now(timezone.utc)
-        start = parse_window_start(args.since, as_of)
-        result, brief = run_pipeline(root, _emails(args.me), start, as_of,
+        last_run = load_last_run(root) if args.since.strip().lower() == "last" else None
+        start = parse_window_start(args.since, as_of, last_run)
+        emails = _emails(args.me) if args.me else [discover_email(root)]
+        if not emails or not emails[0]:
+            raise ValueError("could not infer a Git email; pass --me explicitly")
+        result, brief = run_pipeline(root, emails, start, as_of,
                                      top_n=args.top, half_life_days=args.half_life,
                                      authored_weight=args.authored_weight,
                                      reviewed_weight=args.reviewed_weight,

@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 from datetime import datetime, timezone
-from typing import Dict, Mapping, Sequence
+from typing import Dict, Mapping, Optional, Sequence
 
 from .models import ExposureEntry, Feedback, RankedChange
 
@@ -101,6 +101,27 @@ def load_last_brief(repo: str) -> Dict[str, Sequence[str]]:
         }
     except (OSError, ValueError, AttributeError):
         return {}
+
+
+def save_last_run(repo: str, as_of: str) -> str:
+    path = _state_path(repo, "last-run.json")
+    _atomic_json(path, {"as_of": as_of})
+    return path
+
+
+def load_last_run(repo: str) -> Optional[str]:
+    path = os.path.join(repo, ".catchup", "last-run.json")
+    if os.path.lexists(path) and os.path.islink(path):
+        return None
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as handle:
+            value = json.load(handle)
+        as_of = value.get("as_of") if isinstance(value, dict) else None
+        return as_of if isinstance(as_of, str) else None
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def append_feedback(repo: str, item_id: str, label: str, path_prefix: str = "") -> str:
