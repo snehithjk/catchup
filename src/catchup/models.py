@@ -76,7 +76,7 @@ class Change:
     def novelty_flags(self) -> Tuple[str, ...]:
         flags = []
         if self.dependencies_added:
-            flags.append("new dependency/import")
+            flags.append("new import or dependency")
         if any("/" not in path for path in self.added_files):
             flags.append("new top-level module")
         if self.deleted_files:

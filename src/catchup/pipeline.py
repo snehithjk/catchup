@@ -7,8 +7,7 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from .brief import build_prompt, call_compatible_api, render_stub_brief
 from .changes import ingest
 from .exposure import build_knowledge_map
-from .git import (changed_paths, file_at_commit, list_files_at_commit, log,
-                  repo_root, resolve_commit)
+from .git import log, paths_for_commits, repo_root, resolve_commit, source_files_at_commit
 from .graph import build_import_graph
 from .models import Change, CommitRecord, ExposureEntry, Feedback, PipelineResult, RankedChange
 from .ranking import rank_changes
@@ -27,18 +26,6 @@ def parse_window_start(value: str, as_of: datetime) -> datetime:
         return as_of - timedelta(seconds=amount * units[match.group(2)])
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-
-def _read_contents(repo: str, commit: str, files: Sequence[str]) -> Dict[str, str]:
-    result = {}
-    for path in files:
-        if not path.endswith((".py", ".js", ".jsx", ".ts", ".tsx")):
-            continue
-        try:
-            result[path] = file_at_commit(repo, commit, path)
-        except (OSError, UnicodeDecodeError, RuntimeError):
-            continue
-    return result
 
 
 def _expand_feedback(feedback, last_brief):
@@ -62,9 +49,9 @@ def run_pipeline(repo: str, emails: Sequence[str], window_start: datetime,
     if end.tzinfo is None:
         end = end.replace(tzinfo=timezone.utc)
     prior_records = log(root, before=window_start.isoformat())
-    window_records = log(root, since=window_start.isoformat(), before=end.isoformat())
-    prior_paths = {record.commit: [path for _, path in changed_paths(root, record)]
-                   for record in prior_records}
+    window_records = log(root, since=window_start.isoformat(), before=end.isoformat(),
+                         first_parent=True)
+    prior_paths = paths_for_commits(root, before=window_start.isoformat())
     knowledge_map = build_knowledge_map(
         prior_records, prior_paths, emails, window_start,
         half_life_days=half_life_days,
@@ -76,8 +63,7 @@ def run_pipeline(repo: str, emails: Sequence[str], window_start: datetime,
     changes = ingest(root, window_records)
     boundary_records = window_records or prior_records
     boundary_commit = boundary_records[0].commit if boundary_records else resolve_commit(root, "HEAD")
-    contents = _read_contents(root, boundary_commit,
-                              list_files_at_commit(root, boundary_commit))
+    contents = source_files_at_commit(root, boundary_commit)
     fan_in = build_import_graph(list(contents), contents)
     feedback = load_feedback(root) if persist else {}
     if persist:

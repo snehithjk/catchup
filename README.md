@@ -24,6 +24,10 @@ make demo
 PYTHONPATH=src python3 -m catchup mark <item-id> knew|new|irrelevant --repo .
 ```
 
+The pinned public-repository backtest is documented in
+[`docs/real-evaluation.md`](docs/real-evaluation.md). After downloading its
+ignored fixtures, run `PYTHONPATH=src python3 scripts/real_eval.py`.
+
 The brief is intentionally small. It ranks changes with exposure overlap, module fan-in, novelty signals, and feedback nudges. Each generated sentence must cite a commit, and the verifier checks that cited commits exist and that explicit paths/symbols appear in their diffs.
 
 ## Current milestone

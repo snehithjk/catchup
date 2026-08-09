@@ -12,9 +12,10 @@ from .models import RankedChange
 
 def _path_summary(item: RankedChange) -> str:
     paths = list(item.change.paths[:4])
+    summary = ", ".join("`{}`".format(path) for path in paths) or "the repository"
     if len(item.change.paths) > 4:
-        paths.append("+{} more".format(len(item.change.paths) - 4))
-    return ", ".join("`{}`".format(path) for path in paths) or "the repository"
+        summary += " (+{} more files)".format(len(item.change.paths) - 4)
+    return summary
 
 
 def truncate_diff(patch: str, prioritized_paths: Sequence[str], limit: int = 12000) -> str:

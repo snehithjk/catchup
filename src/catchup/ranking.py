@@ -7,6 +7,9 @@ from .graph import path_distance_fan_in
 from .models import Change, ExposureEntry, Feedback, RankedChange
 
 
+_INTEGRATION_PENALTY = 0.60
+
+
 def _prefix(path: str) -> str:
     pieces = path.split("/")
     return "/".join(pieces[:-1]) or pieces[0]
@@ -21,6 +24,12 @@ def _feedback_for_change(change: Change, feedback: Mapping[str, Feedback]) -> Op
         if inherited:
             return inherited
     return None
+
+
+def _is_integration_commit(change: Change) -> bool:
+    """Recognize merge nodes whose subject carries no semantic change title."""
+    subject = change.subject.strip().lower()
+    return change.is_merge and subject.startswith(("merge ", "merged "))
 
 
 def _exposure_overlap(change: Change, exposure: Mapping[str, ExposureEntry]) -> float:
@@ -42,7 +51,7 @@ def _novelty(change: Change, exposure: Mapping[str, ExposureEntry]) -> Tuple[flo
     reasons = []
     if change.dependencies_added:
         value *= 1.25
-        reasons.append("new dependency/import")
+        reasons.append("new import or dependency")
     if any("/" not in path for path in change.added_files):
         value *= 1.15
         reasons.append("new top-level module")
@@ -62,7 +71,10 @@ def _exposure_context(change: Change, exposure: Mapping[str, ExposureEntry]) -> 
         return (), (), ""
     # Keep one path/commit pair so the verifier can prove the historical
     # exposure citation contains the path named in the sentence.
-    path = max(direct_paths, key=lambda value: (exposure[value].last_seen, value))
+    code_paths = tuple(path for path in direct_paths
+                       if path.lower().endswith((".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs", ".java", ".c", ".h")))
+    candidates = code_paths or direct_paths
+    path = max(candidates, key=lambda value: (exposure[value].last_seen, value))
     entry = exposure[path]
     return (path,), entry.basis, entry.last_commit
 
@@ -84,6 +96,11 @@ def rank_changes(changes: Sequence[Change], exposure: Mapping[str, ExposureEntry
             feedback_entry.label if feedback_entry else "", 1.0)
         score = overlap * blast * novelty * nudge
         reasons = list(novelty_reasons)
+        if _is_integration_commit(change):
+            # A merge is an integration node in the history graph. Keep it
+            # visible, but prefer the direct semantic commits it aggregates.
+            score *= _INTEGRATION_PENALTY
+            reasons.append("integration commit")
         if any(path in exposure for path in change.paths):
             reasons.append("overlaps your exposed files")
         else:
